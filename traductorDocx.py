@@ -1,56 +1,65 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+from translate import Translator
+from docx import Document
+from odf.opendocument import OpenDocumentText
+from odf.text import P, Span
+from odf.style import Style, TextProperties
+import re
+from tqdm import tqdm
 
-from googletrans import Translator
-from mtranslate import translate
-import time
-import sys
-import docx
+def translate_document(input_txt_path, output_odt_path):
+    # Configuración del traductor
+    translator = Translator(from_lang="pl", to_lang="es")
 
-#translator = Translator()
-archivoOrigen = ""
-archivoDestino = ""
+    # Crear documento ODT
+    doc = OpenDocumentText()
 
-if sys.argv[1].endswith(".txt"):
-	archivoOrigen = sys.argv[1]
-	archivoDestino = archivoOrigen.split(".")[0] + "_trad.docx"
-elif sys.argv[1] == "--help" or sys.argv[1] == "-h":
-	print("El archivo a traducir se pasará al programa como primer argumento, debe ser un archivo con extensión .txt")
-	sys.exit()
-else:
-	sys.exit()
-f_dest = docx.Document()
-f_src = open(archivoOrigen,encoding="utf8")
+    # Estilo para la traducción (color verde)
+    green_style = Style(name="GreenText", family="text")
+    green_style.addElement(TextProperties(attributes={"color": "#008000"}))
+    doc.styles.addElement(green_style)
 
-texto = f_src.read()
+    # Leer el archivo de entrada
+    with open(input_txt_path, 'r', encoding='utf-8') as file:
+        content = file.read()
 
-frases = texto.split(".")
-indice = 0
-for frase in frases:
-	orig_para = f_dest.add_paragraph(str(frase)) 
-	orig_para.style = 'Body Text 3' 
-	#orig_para.add_run('\n')
-	print(frase)
-	intentos = 0
-	while intentos < 10:
-		try:
-            #traduccion = translator.translate(frase,src='ru',dest='es')
-			traduccion = translate(frase,"es","ru")
-			#f_dest.write(traduccion.text)
-			trad_para = f_dest.add_paragraph(traduccion)
-			trad_para.style = 'Body Text 2' 
-			#trad_para.add_run('\n')
-			print(traduccion.encode("utf8"))
-			intentos = 10
-		except Exception as e:
-			print(e)
-			intentos += 1
-			time.sleep(1)
-	indice += 1
-	#if indice % 2 == 0:
-		#time.sleep(2)
-	#elif indice % 15 == 0:
-		#time.sleep(15)
-print("Fin de la traduccion")
-f_dest.save(archivoDestino)
-f_src.close()
+    # Dividir el texto en frases basadas en los puntos
+    sentences = re.split(r'(\.|\!|\?)', content)
+
+    # Crear una barra de progreso
+    total_sentences = len(sentences) // 2
+    with tqdm(total=total_sentences, desc="Traduciendo", unit="frase") as pbar:
+        # Procesar cada frase
+        for i in range(0, len(sentences) - 1, 2):
+            original_sentence = sentences[i].strip()
+            punctuation = sentences[i + 1]
+            full_sentence = original_sentence + punctuation
+
+            if original_sentence:
+                # Crear un párrafo para la frase original
+                p_original = P(text=full_sentence)
+                doc.text.addElement(p_original)
+
+                # Traducir la frase
+                translated_sentence = translator.translate(original_sentence)
+                translation_with_format = f"({translated_sentence})"
+
+                # Crear un párrafo para la traducción en verde
+                p_translation = P()
+                span_translation = Span(text=translation_with_format, stylename=green_style)
+                p_translation.addElement(span_translation)
+                doc.text.addElement(p_translation)
+
+            # Actualizar la barra de progreso
+            pbar.update(1)
+
+    # Guardar el documento ODT
+    doc.save(output_odt_path)
+
+# Ruta de entrada y salida
+input_txt_path = "el_brujo.txt"  # Cambiar por la ruta del archivo de entrada
+output_odt_path = "el_brujo_traducido.odt"  # Cambiar por la ruta del archivo de salida
+
+# Llamar a la función
+translate_document(input_txt_path, output_odt_path)
+
+print("Traducción completada. El archivo ODT ha sido generado.")
